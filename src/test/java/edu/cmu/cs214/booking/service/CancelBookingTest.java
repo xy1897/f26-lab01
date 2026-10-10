@@ -1,8 +1,9 @@
 package edu.cmu.cs214.booking.service;
 
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
-import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 
 import edu.cmu.cs214.booking.domain.Booking;
 import edu.cmu.cs214.booking.domain.Room;
@@ -57,5 +58,25 @@ class CancelBookingTest {
         assertEquals(1, svc.listBookings(roomA).size());
         assertEquals(alice, svc.listBookings(roomA).get(0).user());
         assertEquals(1, store.waitlistForRoom(roomA).size());
+    }
+
+    /** S3: cancelling promotes the waitlisted user into a confirmed booking. */
+    @Test
+    void cancellingPromotesTheWaitlistedUser() {
+        BookingService svc = newService();
+        Booking a = confirm(svc, roomA, alice, new TimeInterval(600, 660));
+        assertInstanceOf(
+                BookingResult.Waitlisted.class, svc.book(roomA, bob, new TimeInterval(630, 700)));
+
+        svc.cancelBooking(a.id());
+
+        assertEquals(1, svc.listBookings(roomA).size());
+        Booking promoted = svc.listBookings(roomA).get(0);
+        assertEquals(bob, promoted.user());
+        assertEquals(new TimeInterval(630, 700), promoted.interval());
+        // The promotion is a new booking, not the cancelled one resurrected.
+        assertNotEquals(a.id(), promoted.id());
+        // Bob no longer waits: he holds the booking now.
+        assertEquals(0, store.waitlistForRoom(roomA).size());
     }
 }

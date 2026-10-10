@@ -6,6 +6,8 @@ import edu.cmu.cs214.booking.domain.TimeInterval;
 import edu.cmu.cs214.booking.domain.User;
 import edu.cmu.cs214.booking.domain.WaitlistEntry;
 import edu.cmu.cs214.booking.repo.BookingStore;
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
 
@@ -57,6 +59,37 @@ public class BookingService {
         if (cancelled.isEmpty()) {
             return;
         }
+        Room room = cancelled.get().room();
         store.removeBooking(bookingId);
+        promoteFromWaitlist(room);
+    }
+
+    /**
+     * Promotes at most one waiter for {@code room}: the earliest by arrival order
+     * whose interval does not overlap any remaining confirmed booking.
+     */
+    private void promoteFromWaitlist(Room room) {
+        List<Booking> remaining = store.bookingsForRoom(room);
+        List<WaitlistEntry> waiting = new ArrayList<>(store.waitlistForRoom(room));
+        waiting.sort(Comparator.comparingInt(WaitlistEntry::seq));
+
+        for (WaitlistEntry entry : waiting) {
+            if (fits(remaining, entry.interval())) {
+                store.addBooking(
+                        new Booking("b" + nextBookingSeq++, room, entry.user(), entry.interval()));
+                store.removeWaitlistEntry(entry.id());
+                return;
+            }
+        }
+    }
+
+    /** Whether {@code interval} overlaps none of {@code bookings}. */
+    private boolean fits(List<Booking> bookings, TimeInterval interval) {
+        for (Booking booking : bookings) {
+            if (booking.interval().overlaps(interval)) {
+                return false;
+            }
+        }
+        return true;
     }
 }
